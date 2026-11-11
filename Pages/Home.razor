@@ -1,0 +1,185 @@
+﻿@page "/"
+@using System.Text.Json
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+
+<PageTitle>Hotel Booking</PageTitle>
+
+<h1 class="mb-4">Hotel Booking</h1>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert @(isError ? "alert-danger" : "alert-success")">@message</div>
+}
+
+<div class="card card-body mb-4">
+    <h5>Find a room</h5>
+    <div class="row g-3">
+        <div class="col-md-4">
+            <label class="form-label">Check-in</label>
+            <input type="date" class="form-control" @bind="checkIn" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Check-out</label>
+            <input type="date" class="form-control" @bind="checkOut" />
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Your name</label>
+            <input type="text" class="form-control" @bind="guest" placeholder="Guest name" />
+        </div>
+    </div>
+</div>
+
+@if (Nights <= 0)
+{
+    <div class="alert alert-warning">Check-out must be after check-in.</div>
+}
+else
+{
+    <h5>Available rooms (@Nights night@(Nights == 1 ? "" : "s"))</h5>
+    <table class="table mb-5">
+        <thead>
+            <tr><th>Room</th><th>Type</th><th>Per night</th><th>Total</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var room in rooms)
+            {
+                var free = IsAvailable(room.Number);
+                <tr>
+                    <td>@room.Number</td>
+                    <td>@room.Type</td>
+                    <td>$@room.Price</td>
+                    <td>$@(room.Price * Nights)</td>
+                    <td>
+                        @if (free)
+                        {
+                            <button class="btn btn-primary btn-sm" @onclick="() => Book(room)">Book</button>
+                        }
+                        else
+                        {
+                            <span class="text-danger">Booked</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h5>Bookings</h5>
+@if (bookings.Count == 0)
+{
+    <p class="text-muted">No bookings yet.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr><th>#</th><th>Room</th><th>Guest</th><th>Dates</th><th>Total</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var b in bookings)
+            {
+                <tr>
+                    <td>@b.Id</td>
+                    <td>@b.RoomNumber</td>
+                    <td>@b.Guest</td>
+                    <td>@b.CheckIn.ToString("yyyy-MM-dd") to @b.CheckOut.ToString("yyyy-MM-dd")</td>
+                    <td>$@b.Total</td>
+                    <td><button class="btn btn-outline-danger btn-sm" @onclick="() => Cancel(b)">Cancel</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    const string StorageKey = "hotel-bookings";
+
+    List<Room> rooms = new()
+    {
+        new Room { Number = 101, Type = "Single", Price = 50 },
+        new Room { Number = 102, Type = "Single", Price = 50 },
+        new Room { Number = 103, Type = "Double", Price = 80 },
+        new Room { Number = 104, Type = "Double", Price = 80 },
+        new Room { Number = 201, Type = "Suite", Price = 150 },
+        new Room { Number = 202, Type = "Suite", Price = 150 },
+    };
+
+    List<Booking> bookings = new();
+    DateTime checkIn = DateTime.Today;
+    DateTime checkOut = DateTime.Today.AddDays(1);
+    string guest = "";
+    string message = "";
+    bool isError;
+
+    int Nights => (checkOut - checkIn).Days;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            if (!string.IsNullOrEmpty(json))
+                bookings = JsonSerializer.Deserialize<List<Booking>>(json) ?? new();
+        }
+        catch
+        {
+            bookings = new();
+        }
+    }
+
+    async Task Save()
+    {
+        await JS.InvokeVoidAsync("localStorage.setItem", StorageKey, JsonSerializer.Serialize(bookings));
+    }
+
+    bool IsAvailable(int roomNumber) =>
+        !bookings.Any(b => b.RoomNumber == roomNumber &&
+                           b.CheckIn < checkOut && checkIn < b.CheckOut);
+
+    async Task Book(Room room)
+    {
+        if (string.IsNullOrWhiteSpace(guest))
+        {
+            Show("Please enter your name first.", true);
+            return;
+        }
+        if (checkIn < DateTime.Today)
+        {
+            Show("Check-in cannot be in the past.", true);
+            return;
+        }
+        if (!IsAvailable(room.Number))
+        {
+            Show("That room is already booked for those dates.", true);
+            return;
+        }
+
+        var id = bookings.Count == 0 ? 1 : bookings.Max(b => b.Id) + 1;
+        bookings.Add(new Booking
+        {
+            Id = id,
+            RoomNumber = room.Number,
+            Guest = guest.Trim(),
+            CheckIn = checkIn,
+            CheckOut = checkOut,
+            Total = room.Price * Nights
+        });
+        await Save();
+        Show($"Room {room.Number} booked for {guest.Trim()}!", false);
+    }
+
+    async Task Cancel(Booking booking)
+    {
+        bookings.Remove(booking);
+        await Save();
+        Show("Booking cancelled.", false);
+    }
+
+    void Show(string text, bool error)
+    {
+        message = text;
+        isError = error;
+    }
+}
