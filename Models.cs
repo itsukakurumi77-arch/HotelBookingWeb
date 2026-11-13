@@ -1,16 +1,22 @@
-public class Room
+using System.Text.Json.Serialization;
+
+public class  Room
 {
-    public int Number { get; set; }
-    public string Type { get; set; } = "";
-    public int Price { get; set; }
+    [JsonPropertyName("number")] public int Number { get; set; }
+    [JsonPropertyName("type")] public string  Type { get; set; } = "";
+    [JsonPropertyName("price")] public int Price { get; set; } 
+
 }
 
 public class Booking
 {
+    [JsonPropertyName("id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int Id { get; set; }
-    public int RoomNumber { get; set; }
-    public string Guest { get; set; } = "";
-    public DateTime CheckIn { get; set; }
-    public DateTime CheckOut { get; set; }
-    public int Total { get; set; }
+
+    [JsonPropertyName("room_number")] public int RoomNumber { get; set; }
+    [JsonPropertyName("guest")] public string Guest { get; set; } = "";
+    [JsonPropertyName("check_in")] public DateTime CheckIn { get; set; }
+    [JsonPropertyName("check_out")] public DateTime CheckOut { get; set; }
+    [JsonPropertyName("total")] public int Total { get; set; }
 }

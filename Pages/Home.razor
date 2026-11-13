@@ -1,180 +1,303 @@
 ﻿@page "/"
-@using System.Text.Json
-@using Microsoft.JSInterop
-@inject IJSRuntime JS
+@inject SupabaseService Db
 
-<PageTitle>Hotel Booking</PageTitle>
+<PageTitle>Everlasting Slumber - Find your room</PageTitle>
 
-<h1 class="mb-4">Hotel Booking</h1>
+<section class="hb-hero">
+    <img class="hb-hero-img" src="images/hero.jpg" alt="" onerror="this.style.display='none'" />
+    <div class="hb-hero-shade"></div>
+    <div class="hb-hero-text">
+        <span class="hb-eyebrow">A quiet escape &nbsp;/&nbsp; Puglia, Italy</span>
+        <h1>A little away.<br />A lot at ease.</h1>
+        <p>Slow mornings. Thoughtful rooms. Space to simply be.</p>
+        <span class="hb-note">Just six rooms. All yours to discover.</span>
+    </div>
+</section>
+
+<section class="hb-search">
+    <div class="hb-cell">
+        <label>Check-in</label>
+        <input type="date" @bind="checkIn" />
+    </div>
+    <div class="hb-cell">
+        <label>Check-out</label>
+        <input type="date" @bind="checkOut" />
+    </div>
+    <div class="hb-cell">
+        <label>Guests</label>
+        <select @bind="guestCount">
+            <option value="1">1 guest</option>
+            <option value="2">2 guests</option>
+        </select>
+    </div>
+    <a class="hb-btn hb-btn-lg" href="#rooms">Find my stay →</a>
+</section>
+
+<section class="hb-section" id="rooms">
+    <span class="hb-eyebrow hb-dark">Your stay, your pace</span>
+    <div class="hb-head">
+        <div>
+            <h2>Find your kind of comfort.</h2>
+            <p class="hb-muted">@Words(rooms.Count) considered spaces. One lovely escape.</p>
+        </div>
+        <select class="hb-select" @bind="sortOrder">
+            <option value="low">Price: low to high</option>
+            <option value="high">Price: high to low</option>
+        </select>
+    </div>
+
+    <div class="hb-chips">
+        @foreach (var t in Types)
+        {
+            <button class="@($"hb-chip {(filter == t ? "hb-chip-on" : "")}")" @onclick="() => filter = t">
+                @(t == "All" ? "All rooms" : t) <sup>@CountOf(t)</sup>
+            </button>
+        }
+    </div>
+
+    @if (loading)
+    {
+        <p class="hb-muted hb-center">Loading rooms...</p>
+    }
+    else if (Nights <= 0)
+    {
+        <div class="hb-alert">Check-out must be after check-in.</div>
+    }
+    else
+    {
+        <div class="hb-grid">
+            @foreach (var room in FilteredRooms)
+            {
+                var free = IsAvailable(room.Number);
+                var info = Meta(room);
+                <article class="@($"hb-card {(free ? "" : "hb-taken")}")">
+                    <div class="hb-photo">
+                        <img src="@($"images/{info.Image}")" alt="@info.Name" onerror="this.style.display='none'" />
+                        <span class="hb-tag hb-tag-type">@room.Type</span>
+                        <span class="@($"hb-tag hb-tag-status {(free ? "" : "hb-tag-off")}")">@(free ? "Available" : "Booked")</span>
+                    </div>
+                    <div class="hb-card-body">
+                        <h3>@info.Name</h3>
+                        <p class="hb-specs">@info.Specs</p>
+                        <p class="hb-blurb">@info.Blurb</p>
+                        <div class="hb-card-foot">
+                            <div><span class="hb-price">$@room.Price</span> <span class="hb-per">/ night</span></div>
+                            <button class="hb-btn hb-btn-sm" disabled="@(!free || busy)" @onclick="() => Ask(room)">Book room ↗</button>
+                        </div>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+
+    <div class="hb-foot-note" id="experience">
+        <span>A slower stay starts here. · Breakfast included in every room.</span>
+        <span>@CountOf("Single") singles / @CountOf("Double") doubles / @CountOf("Suite") suites</span>
+    </div>
+</section>
+
+<section class="hb-section">
+    <h2 class="hb-h2-sm">Your bookings</h2>
+    @if (bookings.Count == 0)
+    {
+        <p class="hb-muted">No bookings yet.</p>
+    }
+    else
+    {
+        <div class="hb-list">
+            @foreach (var b in bookings)
+            {
+                <div class="hb-item">
+                    <div>
+                        <strong>Room @b.RoomNumber</strong> · @b.Guest
+                        <div class="hb-muted">@b.CheckIn.ToString("MMM d, yyyy") → @b.CheckOut.ToString("MMM d, yyyy")</div>
+                    </div>
+                    <div class="hb-item-right">
+                        <span class="hb-total">$@b.Total</span>
+                        <button class="hb-btn hb-btn-sm hb-cancel" disabled="@busy" @onclick="() => Cancel(b)">Cancel</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@if (pending is not null)
+{
+    var pinfo = Meta(pending);
+    <div class="hb-overlay" @onclick="() => pending = null">
+        <div class="hb-modal" @onclick:stopPropagation="true">
+            <h3>@pinfo.Name</h3>
+            <p class="hb-muted">@checkIn.ToString("MMM d") → @checkOut.ToString("MMM d, yyyy") · @NightsText</p>
+            <input class="hb-input" type="text" placeholder="Your name" @bind="guest" @bind:event="oninput" />
+            <p class="hb-total">$@(pending.Price * Nights)</p>
+            <div class="hb-modal-actions">
+                <button class="hb-btn hb-ghost" @onclick="() => pending = null">Back</button>
+                <button class="hb-btn" disabled="@(busy || string.IsNullOrWhiteSpace(guest))" @onclick="ConfirmBooking">Confirm booking</button>
+            </div>
+        </div>
+    </div>
+}
 
 @if (!string.IsNullOrEmpty(message))
 {
-    <div class="alert @(isError ? "alert-danger" : "alert-success")">@message</div>
-}
-
-<div class="card card-body mb-4">
-    <h5>Find a room</h5>
-    <div class="row g-3">
-        <div class="col-md-4">
-            <label class="form-label">Check-in</label>
-            <input type="date" class="form-control" @bind="checkIn" />
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Check-out</label>
-            <input type="date" class="form-control" @bind="checkOut" />
-        </div>
-        <div class="col-md-4">
-            <label class="form-label">Your name</label>
-            <input type="text" class="form-control" @bind="guest" placeholder="Guest name" />
-        </div>
-    </div>
-</div>
-
-@if (Nights <= 0)
-{
-    <div class="alert alert-warning">Check-out must be after check-in.</div>
-}
-else
-{
-    <h5>Available rooms (@Nights night@(Nights == 1 ? "" : "s"))</h5>
-    <table class="table mb-5">
-        <thead>
-            <tr><th>Room</th><th>Type</th><th>Per night</th><th>Total</th><th></th></tr>
-        </thead>
-        <tbody>
-            @foreach (var room in rooms)
-            {
-                var free = IsAvailable(room.Number);
-                <tr>
-                    <td>@room.Number</td>
-                    <td>@room.Type</td>
-                    <td>$@room.Price</td>
-                    <td>$@(room.Price * Nights)</td>
-                    <td>
-                        @if (free)
-                        {
-                            <button class="btn btn-primary btn-sm" @onclick="() => Book(room)">Book</button>
-                        }
-                        else
-                        {
-                            <span class="text-danger">Booked</span>
-                        }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
-}
-
-<h5>Bookings</h5>
-@if (bookings.Count == 0)
-{
-    <p class="text-muted">No bookings yet.</p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr><th>#</th><th>Room</th><th>Guest</th><th>Dates</th><th>Total</th><th></th></tr>
-        </thead>
-        <tbody>
-            @foreach (var b in bookings)
-            {
-                <tr>
-                    <td>@b.Id</td>
-                    <td>@b.RoomNumber</td>
-                    <td>@b.Guest</td>
-                    <td>@b.CheckIn.ToString("yyyy-MM-dd") to @b.CheckOut.ToString("yyyy-MM-dd")</td>
-                    <td>$@b.Total</td>
-                    <td><button class="btn btn-outline-danger btn-sm" @onclick="() => Cancel(b)">Cancel</button></td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="@($"hb-toast {(isError ? "hb-err" : "hb-ok")}")" @onclick="() => message = string.Empty">@message</div>
 }
 
 @code {
-    const string StorageKey = "hotel-bookings";
+    static readonly string[] Types = { "All", "Single", "Double", "Suite" };
 
-    List<Room> rooms = new()
+    // Names, descriptions, photos and capacity for each room number. Prices come from Supabase.
+    static readonly Dictionary<int, (string Name, string Specs, string Blurb, string Image, int Guests)> Details = new()
     {
-        new Room { Number = 101, Type = "Single", Price = 50 },
-        new Room { Number = 102, Type = "Single", Price = 50 },
-        new Room { Number = 103, Type = "Double", Price = 80 },
-        new Room { Number = 104, Type = "Double", Price = 80 },
-        new Room { Number = 201, Type = "Suite", Price = 150 },
-        new Room { Number = 202, Type = "Suite", Price = 150 },
+        [101] = ("The Cosy Single", "1 guest · Single bed · 18 m²", "Quiet comfort, just for you.", "cosy-single.jpg", 1),
+        [102] = ("The Garden Single", "1 guest · Single bed · 22 m²", "Your own little garden hideaway.", "garden-single.jpg", 1),
+        [103] = ("The Classic Double", "2 guests · Queen bed · 28 m²", "A soft landing for two.", "classic-double.jpg", 2),
+        [104] = ("The Terrace Double", "2 guests · King bed · 32 m²", "Morning coffee, with a view.", "terrace-double.jpg", 2),
+        [201] = ("The Olive Suite", "2 guests · King bed · 45 m²", "Room to settle in and slow down.", "olive-suite.jpg", 2),
+        [202] = ("The Slumber Suite", "2 guests · King bed · 58 m²", "A private terrace. A little more bliss.", "slumber-suite.jpg", 2),
     };
 
+    List<Room> rooms = new();
     List<Booking> bookings = new();
     DateTime checkIn = DateTime.Today;
     DateTime checkOut = DateTime.Today.AddDays(1);
+    int guestCount = 2;
     string guest = "";
     string message = "";
     bool isError;
+    bool loading = true;
+    bool busy;
+    string filter = "All";
+    string sortOrder = "low";
+    Room? pending;
 
     int Nights => (checkOut - checkIn).Days;
+    string NightsText => Nights > 0 ? $"{Nights} night{(Nights == 1 ? "" : "s")}" : "";
 
-    protected override async Task OnInitializedAsync()
+    int CountOf(string type) => type == "All" ? rooms.Count : rooms.Count(r => r.Type == type);
+
+    static string Words(int n) => n switch
     {
-        try
+        1 => "One", 2 => "Two", 3 => "Three", 4 => "Four", 5 => "Five",
+        6 => "Six", 7 => "Seven", 8 => "Eight", 9 => "Nine", 10 => "Ten",
+        _ => n.ToString()
+    };
+
+    (string Name, string Specs, string Blurb, string Image, int Guests) Meta(Room room) =>
+        Details.TryGetValue(room.Number, out var d)
+            ? d
+            : ($"{room.Type} Room #{room.Number}", "", "", $"{room.Type.ToLower()}.jpg", 2);
+
+    IEnumerable<Room> FilteredRooms
+    {
+        get
         {
-            var json = await JS.InvokeAsync<string?>("localStorage.getItem", StorageKey);
-            if (!string.IsNullOrEmpty(json))
-                bookings = JsonSerializer.Deserialize<List<Booking>>(json) ?? new();
-        }
-        catch
-        {
-            bookings = new();
+            var list = rooms.Where(r => filter == "All" || r.Type == filter);
+            return sortOrder == "low" ? list.OrderBy(r => r.Price) : list.OrderByDescending(r => r.Price);
         }
     }
 
-    async Task Save()
+    protected override async Task OnInitializedAsync()
     {
-        await JS.InvokeVoidAsync("localStorage.setItem", StorageKey, JsonSerializer.Serialize(bookings));
+        await Load();
+        loading = false;
+    }
+
+    async Task Load()
+    {
+        try
+        {
+            rooms = await Db.GetRooms();
+            bookings = await Db.GetBookings();
+        }
+        catch
+        {
+            Show("Could not connect to the database. Check your Supabase URL and key.", true);
+        }
     }
 
     bool IsAvailable(int roomNumber) =>
         !bookings.Any(b => b.RoomNumber == roomNumber &&
                            b.CheckIn < checkOut && checkIn < b.CheckOut);
 
-    async Task Book(Room room)
+    void Ask(Room room)
     {
-        if (string.IsNullOrWhiteSpace(guest))
-        {
-            Show("Please enter your name first.", true);
-            return;
-        }
         if (checkIn < DateTime.Today)
         {
             Show("Check-in cannot be in the past.", true);
             return;
         }
-        if (!IsAvailable(room.Number))
+
+        var info = Meta(room);
+        if (guestCount > info.Guests)
         {
-            Show("That room is already booked for those dates.", true);
+            Show($"{info.Name} sleeps {info.Guests} guest{(info.Guests == 1 ? "" : "s")}. Change Guests to {info.Guests} to book it.", true);
             return;
         }
 
-        var id = bookings.Count == 0 ? 1 : bookings.Max(b => b.Id) + 1;
-        bookings.Add(new Booking
+        pending = room;
+    }
+
+    async Task ConfirmBooking()
+    {
+        var room = pending;
+        if (room is null || string.IsNullOrWhiteSpace(guest)) return;
+        pending = null;
+        await Book(room);
+    }
+
+    async Task Book(Room room)
+    {
+        busy = true;
+        try
         {
-            Id = id,
-            RoomNumber = room.Number,
-            Guest = guest.Trim(),
-            CheckIn = checkIn,
-            CheckOut = checkOut,
-            Total = room.Price * Nights
-        });
-        await Save();
-        Show($"Room {room.Number} booked for {guest.Trim()}!", false);
+            var error = await Db.AddBooking(new Booking
+            {
+                RoomNumber = room.Number,
+                Guest = guest.Trim(),
+                CheckIn = checkIn,
+                CheckOut = checkOut,
+                Total = room.Price * Nights
+            });
+
+            if (error is null)
+            {
+                Show($"{Meta(room).Name} booked for {guest.Trim()}!", false);
+                await Load();
+            }
+            else
+            {
+                Show(error, true);
+            }
+        }
+        catch
+        {
+            Show("Could not reach the database.", true);
+        }
+        busy = false;
     }
 
     async Task Cancel(Booking booking)
     {
-        bookings.Remove(booking);
-        await Save();
-        Show("Booking cancelled.", false);
+        busy = true;
+        try
+        {
+            if (await Db.DeleteBooking(booking.Id))
+            {
+                Show("Booking cancelled.", false);
+                await Load();
+            }
+            else
+            {
+                Show("Could not cancel the booking.", true);
+            }
+        }
+        catch
+        {
+            Show("Could not reach the database.", true);
+        }
+        busy = false;
     }
 
     void Show(string text, bool error)

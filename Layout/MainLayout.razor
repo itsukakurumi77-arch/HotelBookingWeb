@@ -1,16 +1,32 @@
 ﻿@inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
+
+<header class="hb-nav">
+    <span class="hb-logo">Everlasting Slumber</span>
+    <nav class="hb-links">
+        <a href="#rooms" class="hb-active">Our rooms</a>
+        <a href="#experience">The experience</a>
+        <a href="#contact">Contact</a>
+    </nav>
+    <a class="hb-btn hb-btn-sm" href="#rooms">Find your room</a>
+</header>
+
+<main>
+    @Body
+</main>
+
+<footer class="hb-footer" id="contact">
+    <div class="hb-foot-left">
+        <span class="hb-logo">Everlasting Slumber</span>
+        <span class="hb-muted">Somewhere you can just be.</span>
     </div>
+    <div class="hb-foot-right">
+        <span>hello@everlastingslumber.example</span>
+        <span class="hb-muted">Puglia, Italy</span>
+    </div>
+</footer>
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
-
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
 </div>
